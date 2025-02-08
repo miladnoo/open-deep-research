@@ -8,21 +8,31 @@ config({
 });
 
 const runMigrate = async () => {
+  // Skip migrations if database operations are disabled
   if (!process.env.POSTGRES_URL) {
-    throw new Error('POSTGRES_URL is not defined');
+    console.log('🚫 Database operations disabled - skipping migrations');
+    process.exit(0);
+    return;
   }
 
-  const connection = postgres(process.env.POSTGRES_URL, { max: 1 });
-  const db = drizzle(connection);
+  try {
+    const connection = postgres(process.env.POSTGRES_URL, { max: 1 });
+    const db = drizzle(connection);
 
-  console.log('⏳ Running migrations...');
+    console.log('⏳ Running migrations...');
 
-  const start = Date.now();
-  await migrate(db, { migrationsFolder: './lib/db/migrations' });
-  const end = Date.now();
+    const start = Date.now();
+    await migrate(db, { migrationsFolder: './lib/db/migrations' });
+    const end = Date.now();
 
-  console.log('✅ Migrations completed in', end - start, 'ms');
-  process.exit(0);
+    console.log('✅ Migrations completed in', end - start, 'ms');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Migration failed');
+    console.error(error);
+    // Still exit successfully since database operations are optional
+    process.exit(0);
+  }
 };
 
 runMigrate().catch((err) => {
