@@ -9,7 +9,6 @@ import {
 } from 'ai';
 import { z } from 'zod';
 
-import { auth, signIn } from '@/app/(auth)/auth';
 import { customModel } from '@/lib/ai';
 import { models } from '@/lib/ai/models';
 import { rateLimiter } from '@/lib/rate-limit';
@@ -68,42 +67,8 @@ export async function POST(request: Request) {
   }: { id: string; messages: Array<Message>; modelId: string } =
     await request.json();
 
-  let session = await auth();
-
-  // If no session exists, create an anonymous session
-  if (!session?.user) {
-    try {
-      const result = await signIn('credentials', {
-        redirect: false,
-      });
-
-      if (result?.error) {
-        console.error('Failed to create anonymous session:', result.error);
-        return new Response('Failed to create anonymous session', {
-          status: 500,
-        });
-      }
-
-      session = await auth();
-
-      if (!session?.user) {
-        console.error('Failed to get session after creation');
-        return new Response('Failed to create session', { status: 500 });
-      }
-    } catch (error) {
-      console.error('Error creating anonymous session:', error);
-      return new Response('Failed to create anonymous session', {
-        status: 500,
-      });
-    }
-  }
-
-  if (!session?.user?.id) {
-    return new Response('Failed to create session', { status: 500 });
-  }
-
-  // Apply rate limiting
-  const identifier = session.user.id;
+  // Use a fixed anonymous user ID for rate limiting
+  const identifier = 'anonymous-user';
   const { success, limit, reset, remaining } =
     await rateLimiter.limit(identifier);
 
@@ -126,9 +91,10 @@ export async function POST(request: Request) {
 
   const chat = await getChatById({ id });
 
+  // Skip saving chat information when auth is disabled
   if (!chat) {
     const title = await generateTitleFromUserMessage({ message: userMessage });
-    await saveChat({ id, userId: session.user.id, title });
+    await saveChat({ id, userId: 'anonymous-user', title });
   }
 
   const userMessageId = generateUUID();
@@ -299,15 +265,13 @@ export async function POST(request: Request) {
                 dataStream.writeData({ type: 'finish', content: '' });
               }
 
-              if (session.user?.id) {
-                await saveDocument({
-                  id,
-                  title,
-                  kind,
-                  content: draftText,
-                  userId: session.user.id,
-                });
-              }
+              await saveDocument({
+                id,
+                title,
+                kind,
+                content: draftText,
+                userId: 'anonymous-user',
+              });
 
               return {
                 id,
@@ -484,15 +448,13 @@ export async function POST(request: Request) {
                 dataStream.writeData({ type: 'finish', content: '' });
               }
 
-              if (session.user?.id) {
-                await saveDocument({
-                  id,
-                  title: document.title,
-                  content: draftText,
-                  kind: document.kind,
-                  userId: session.user.id,
-                });
-              }
+              await saveDocument({
+                id,
+                title: document.title,
+                content: draftText,
+                kind: document.kind,
+                userId: 'anonymous-user',
+              });
 
               return {
                 id,
@@ -559,18 +521,14 @@ export async function POST(request: Request) {
                 suggestions.push(suggestion);
               }
 
-              if (session.user?.id) {
-                const userId = session.user.id;
-
-                await saveSuggestions({
-                  suggestions: suggestions.map((suggestion) => ({
-                    ...suggestion,
-                    userId,
-                    createdAt: new Date(),
-                    documentCreatedAt: document.createdAt,
-                  })),
-                });
-              }
+              await saveSuggestions({
+                suggestions: suggestions.map((suggestion) => ({
+                  ...suggestion,
+                  userId: 'anonymous-user',
+                  createdAt: new Date(),
+                  documentCreatedAt: document.createdAt,
+                })),
+              });
 
               return {
                 id: documentId,
@@ -1038,35 +996,33 @@ export async function POST(request: Request) {
           },
         },
         onFinish: async ({ response }) => {
-          if (session.user?.id) {
-            try {
-              const responseMessagesWithoutIncompleteToolCalls =
-                sanitizeResponseMessages(response.messages);
+          try {
+            const responseMessagesWithoutIncompleteToolCalls =
+              sanitizeResponseMessages(response.messages);
 
-              await saveMessages({
-                messages: responseMessagesWithoutIncompleteToolCalls.map(
-                  (message) => {
-                    const messageId = generateUUID();
+            await saveMessages({
+              messages: responseMessagesWithoutIncompleteToolCalls.map(
+                (message) => {
+                  const messageId = generateUUID();
 
-                    if (message.role === 'assistant') {
-                      dataStream.writeMessageAnnotation({
-                        messageIdFromServer: messageId,
-                      });
-                    }
+                  if (message.role === 'assistant') {
+                    dataStream.writeMessageAnnotation({
+                      messageIdFromServer: messageId,
+                    });
+                  }
 
-                    return {
-                      id: messageId,
-                      chatId: id,
-                      role: message.role,
-                      content: message.content,
-                      createdAt: new Date(),
-                    };
-                  },
-                ),
-              });
-            } catch (error) {
-              console.error('Failed to save chat');
-            }
+                  return {
+                    id: messageId,
+                    chatId: id,
+                    role: message.role,
+                    content: message.content,
+                    createdAt: new Date(),
+                  };
+                },
+              ),
+            });
+          } catch (error) {
+            console.error('Failed to save chat');
           }
         },
         experimental_telemetry: {
@@ -1088,29 +1044,8 @@ export async function DELETE(request: Request) {
     return new Response('Not Found', { status: 404 });
   }
 
-  let session = await auth();
-
-  // If no session exists, create an anonymous session
-  if (!session?.user) {
-    await signIn('credentials', {
-      redirect: false,
-    });
-    session = await auth();
-  }
-
-  if (!session?.user?.id) {
-    return new Response('Failed to create session', { status: 500 });
-  }
-
   try {
-    const chat = await getChatById({ id });
-
-    if (chat.userId !== session.user.id) {
-      return new Response('Unauthorized', { status: 401 });
-    }
-
     await deleteChatById({ id });
-
     return new Response('Chat deleted', { status: 200 });
   } catch (error) {
     return new Response('An error occurred while processing your request', {
