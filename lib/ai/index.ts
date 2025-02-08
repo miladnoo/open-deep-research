@@ -10,6 +10,19 @@ type ReasoningModel = typeof VALID_REASONING_MODELS[number];
 
 // Valid reasoning models that can be used for research analysis and structured outputs
 const VALID_REASONING_MODELS = [
+  // OpenAI Models
+  'openai/gpt-4-0125-preview',
+  'openai/gpt-4',
+  'openai/gpt-3.5-turbo',
+  // Anthropic Models
+  'anthropic/claude-3-opus',
+  'anthropic/claude-3-sonnet',
+  'anthropic/claude-2.1',
+  // Google Models
+  'google/gemini-pro',
+  // Mistral Models
+  'mistral-ai/mistral-medium',
+  // Legacy Models
   'o1', 'o1-mini', 'o3-mini',
   'deepseek-ai/DeepSeek-R1',
   'deepseek-reasoner',
@@ -17,7 +30,15 @@ const VALID_REASONING_MODELS = [
 ] as const;
 
 // Models that support JSON structured output
-const JSON_SUPPORTED_MODELS = ['gpt-4o', 'gpt-4o-mini', 'o1', 'o3-mini'] as const;
+const JSON_SUPPORTED_MODELS = [
+  'openai/gpt-4-0125-preview',
+  'openai/gpt-4',
+  'openai/gpt-3.5-turbo',
+  'anthropic/claude-3-opus',
+  'anthropic/claude-3-sonnet',
+  'anthropic/claude-2.1',
+  'gpt-4o', 'gpt-4o-mini', 'o1', 'o3-mini'
+] as const;
 
 // Helper to check if model supports JSON
 export const supportsJsonOutput = (modelId: string) =>
@@ -51,25 +72,33 @@ function getReasoningModel(modelId: string) {
 }
 
 export const customModel = (apiIdentifier: string, forReasoning: boolean = false) => {
-  // Check which API key is available
-  const hasOpenRouterKey = process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY !== "****";
-
   // If it's for reasoning, get the appropriate reasoning model
   const modelId = forReasoning ? getReasoningModel(apiIdentifier) : apiIdentifier;
 
+  // Check which API key is available
+  const hasOpenRouterKey = process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY !== "****";
+  const hasOpenAIKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "****";
+  
+  // Determine which provider to use based on model and available keys
+  let model;
+  
   if (hasOpenRouterKey) {
-    return wrapLanguageModel({
-      model: openrouter(modelId),
-      middleware: customMiddleware,
-    });
+    // Use OpenRouter for all models if key is available
+    // OpenRouter expects the full model identifier (e.g. 'openai/gpt-4')
+    // OpenRouter accepts either chat or completion models
+    // OpenRouter models use the chat interface for all models
+    model = openrouter(modelId);
+  } else if (modelId.startsWith('openai/') && hasOpenAIKey) {
+    // Fallback to direct OpenAI if using OpenAI model and key is available
+    model = openai(modelId.replace('openai/', ''));
+  } else if (modelId === 'deepseek-ai/DeepSeek-R1') {
+    model = togetherai(modelId);
+  } else if (modelId === 'deepseek-reasoner') {
+    model = deepseek(modelId);
+  } else {
+    // If no appropriate key is available, default to OpenAI
+    model = openai(modelId.replace(/^.*?\//, ''));
   }
-
-  // Select provider based on model
-  const model = modelId === 'deepseek-ai/DeepSeek-R1'
-    ? togetherai(modelId)
-    : modelId === 'deepseek-reasoner'
-    ? deepseek(modelId)
-    : openai(modelId);
 
   return wrapLanguageModel({
     model,

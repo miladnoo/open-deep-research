@@ -2,18 +2,31 @@
 
 import { type CoreUserMessage, generateText } from 'ai';
 import { cookies } from 'next/headers';
+import { revalidatePath } from 'next/cache';
 
 import { customModel } from '@/lib/ai';
-import {
-  deleteMessagesByChatIdAfterTimestamp,
-  getMessageById,
-  updateChatVisiblityById,
-} from '@/lib/db/queries';
 import { VisibilityType } from '@/components/visibility-selector';
 
 export async function saveModelId(model: string) {
-  const cookieStore = await cookies();
-  cookieStore.set('model-id', model);
+  try {
+    const cookieStore = await cookies();
+    cookieStore.set('model-id', model, {
+      // Set cookie options
+      path: '/',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      // 30 days
+      maxAge: 60 * 60 * 24 * 30
+    });
+    
+    // Revalidate the path to ensure UI updates
+    revalidatePath('/');
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to save model ID:', error);
+    return { success: false, error: 'Failed to save model preference' };
+  }
 }
 
 export async function generateTitleFromUserMessage({
@@ -34,13 +47,9 @@ export async function generateTitleFromUserMessage({
   return title;
 }
 
+// Database operations disabled
 export async function deleteTrailingMessages({ id }: { id: string }) {
-  const [message] = await getMessageById({ id });
-
-  await deleteMessagesByChatIdAfterTimestamp({
-    chatId: message.chatId,
-    timestamp: message.createdAt,
-  });
+  console.log('Database operations disabled');
 }
 
 export async function updateChatVisibility({
@@ -50,5 +59,5 @@ export async function updateChatVisibility({
   chatId: string;
   visibility: VisibilityType;
 }) {
-  await updateChatVisiblityById({ chatId, visibility });
+  console.log('Database operations disabled');
 }

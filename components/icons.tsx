@@ -1166,3 +1166,22 @@ export function ExternalLinkIcon({
     </svg>
   );
 }
+
+export const SearchIcon = ({ size = 16, className }: { size?: number, className?: string }) => {
+  return (
+    <svg
+      height={size}
+      strokeLinejoin="round"
+      viewBox="0 0 16 16"
+      width={size}
+      style={{ color: 'currentcolor' }}
+    >
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M7.25 1.5C4.07436 1.5 1.5 4.07436 1.5 7.25C1.5 10.4256 4.07436 13 7.25 13C8.75366 13 10.1289 12.4317 11.1784 11.4783L14.0303 14.3303L14.5607 14.8607L15.6213 13.8L15.0909 13.2697L12.2389 10.4177C13.1922 9.36809 13.7604 7.99286 13.7604 6.4892C13.7604 3.31356 11.186 0.73916 8.01039 0.73916C7.75628 0.73916 7.50217 0.753119 7.25 0.780453V1.5ZM7.25 11.5C4.90279 11.5 3 9.59721 3 7.25C3 4.90279 4.90279 3 7.25 3C9.59721 3 11.5 4.90279 11.5 7.25C11.5 9.59721 9.59721 11.5 7.25 11.5Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
